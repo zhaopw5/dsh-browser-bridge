@@ -1,104 +1,116 @@
-# DSH Page Grab
+# dsh-browser-bridge
 
-[中文](README.md) | **English**
+**English** | [中文](README.md)
 
-Hand any **page you're already logged into in Chrome** to a **local AI agent** (DeepSeek Harness).
+Hand any **page you're already logged into in a browser** to a **local AI agent** (DeepSeek Harness).
 
-A Chrome extension plus a tiny loopback-only service. You do the login, the 2FA, the captcha — the agent only gets the rendered page.
-
-## Why this exists
-
-An agent normally has two ways to read a web page, and both fall short:
-
-- `web_fetch` can't get past login walls (401), and can't see DOM that JavaScript renders
-- Screenshots are pixels: no structure, no links, and someone has to scroll and re-shoot every page
-
-An extension runs inside **the session you're already logged into**. One click hands over the rendered DOM — no Chrome flags, no `--remote-debugging-port` (blocked for the default profile since Chrome 136), no re-login.
-
-## Layout
+One repo, two halves:
 
 ```
-extension/         Chrome extension (MV3)
-  manifest.json    activeTab + scripting + storage
-  background.js    capture logic, auto-capture whitelist
-  popup.html/js    the panel behind the toolbar icon
-server.mjs         local bridge: 127.0.0.1:38999 only, writes into inbox/
-start-bridge.cmd   double-click launcher (Windows)
+collector/         browser collector (Chrome / Edge extension, MV3)
+lib/ locale/ docs/ the DSH plugin itself
 ```
+
+The collector reads the page; the plugin feeds it into the model's context. They talk over one HTTP endpoint and share no code.
+
+## Why
+
+An agent normally has two ways to read a page, and both fall short:
+
+- `web_fetch` can't pass login walls (401) or see DOM rendered by JavaScript
+- Screenshots are pixels: no structure, and someone has to scroll and re-shoot
+
+The extension runs inside **the session you are already logged into**. One click hands over the rendered DOM — no Chrome flags, no `--remote-debugging-port` (blocked for the default profile since Chrome 136), no re-login.
 
 ## Install
 
-### 1. Start the bridge
+### 1. The plugin
 
 ```bash
-node server.mjs
+dsh plugin add zhaopw5/dsh-browser-bridge
 ```
 
-Or double-click `start-bridge.cmd` on Windows. Wait for `listening on http://127.0.0.1:38999`.
+For local development, place the repo at `~/.dsh/plugins/dsh-browser-bridge` and add to the profile's `package.json`:
 
-### 2. Load the extension
+```json
+"dsh-browser-bridge": "link:C:/Users/<you>/.dsh/plugins/dsh-browser-bridge"
+```
 
-1. Open `chrome://extensions`
-2. Turn on **Developer mode** (top right)
-3. **Load unpacked** → pick the `extension` directory
-4. Pin "DSH 抓页" from the puzzle-piece menu
+plus `"dsh-browser-bridge"` in `dsh.profile.bundles`.
 
-### 3. Use it
+### 2. The collector
 
-- **One page**: open it → click the icon → **Grab this page**
-- **Whole site**: click the icon → turn on **Auto-grab this site** → approve the one-time Chrome prompt → every page on that host is captured on load
+After the plugin starts, `~/.dsh/plugins/dsh-browser-bridge/collector` is the extension directory (**single copy, no duplicates**).
+
+1. Open `chrome://extensions` or `edge://extensions`
+2. Turn on **Developer mode**
+3. **Load unpacked** → pick the `collector` directory
+4. Pin it to the toolbar
+
+Chrome and Edge share one codebase: the extension detects its host at runtime (`userAgentData`, falling back to `Edg/`) and reports `chrome` or `edge` accordingly.
+
+### 3. Use
+
+- **One page**: open it → click the icon → *Grab this page*
+- **Whole site**: click the icon → turn on *Auto-grab this site* → approve the one-time prompt → every page on that host is captured on load
 - **Hotkey**: `Ctrl+Shift+Y` grabs without opening the panel
 
-Output lands in `inbox/`:
+The plugin's settings page has exactly two switches: Chrome collector, Edge collector.
+
+Captures land in `~/.dsh/browser-bridge/inbox/`:
 
 | File | Contents |
 |---|---|
 | `timestamp-host.md` | body text (`article`/`main`, falling back to `body`) with a url/title header |
-| `timestamp-host.html` | rendered HTML (for tables and link structure) |
-| `timestamp-host.json` | metadata (sizes, source) |
+| `timestamp-host.html` | rendered HTML |
+| `timestamp-host.json` | metadata |
 | `last.json` | most recent capture |
 
-## Permissions and boundaries
+## Model side
 
-| Permission | Why |
-|---|---|
-| `activeTab` | read the current tab, only for the moment you click the icon |
-| `scripting` | inject the body-extraction script |
-| `storage` | remember which hosts have auto-grab enabled |
-| `optional_host_permissions` | requested per site only when you enable auto-grab; revocable anytime |
-| `http://127.0.0.1:38999/*` | deliver the result to the local bridge |
+The plugin registers three things:
 
-What it explicitly does **not** do:
+1. **A prompt section** stating that a collector exists, when to use it, and not to substitute a same-named file from the workspace
+2. **A runtime context line**, recomputed every turn:
+   ```
+   浏览器桥：最近一次抓取是「…」（https://…），12 秒前，来自 chrome。文件：…
+   ```
+3. **A `browser_page` tool** so the model can pull the body without reading the whole file into context
 
-- Read cookies, passwords, or values typed into `<input>` (`innerText` contains none of that)
-- Watch your browsing history, or send anything off the machine
-- Open `--remote-debugging-port` or take over the browser
-
-> Note: the token in `server.mjs` is a constant. It stops stray POSTs, not a hostile local process. The server binds loopback only, so the exposure is limited to your own machine.
-
-## Known limits
-
-- Top-level document only — `iframe` and shadow DOM content is not reached
-- Anything hidden until interaction (expanders, pagination, post-login blocks) must be opened first
-- 400k characters of text / 4 MB of HTML per page, then truncated
-- `chrome://`, extension pages and `file://` are rejected
-- Unpacked extension: reload it after moving machines or profiles; Chrome may nag about developer mode
+Captures attach to the session whose prompt was assembled most recently, so page captured in project A is used by session A first.
 
 ## Protocol
 
-The extension `POST`s JSON to `/ingest`:
+The collector `POST`s to `/ingest` with an `X-DSH-Token` header:
 
 ```json
 {
   "url": "https://example.com/page",
   "title": "Page title",
   "at": "2026-11-11T03:11:02.764Z",
+  "browser": "chrome",
   "text": "body text…",
   "html": "<html>…</html>"
 }
 ```
 
-with an `X-DSH-Token` header. `GET /ping` is the health check.
+`GET /ping` is the health check and reports the collectors and the collector directory.
+
+## Permissions and limits
+
+The collector asks for `activeTab` + `scripting` + `storage`, plus optional per-site grants:
+
+- reads the active tab only when you click the icon
+- never reads cookies, passwords, or values typed into `<input>`
+- never watches browsing history, never sends anything off the machine
+- listens on `127.0.0.1:38999` only
+
+Known limits:
+
+- top-level document only; `iframe` and shadow DOM are out of reach
+- content hidden behind interaction must be opened first
+- 400k characters of text / 4 MB of HTML per page, then truncated
+- `chrome://`, extension pages and `file://` are rejected
 
 ## License
 

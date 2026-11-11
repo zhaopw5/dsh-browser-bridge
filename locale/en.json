@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Browser collectors",
+    "description": "Receives pages from the Chrome / Edge extension so the agent reads the page you are actually looking at.",
+    "detail": "docs/detail.en.md"
+  }
+}

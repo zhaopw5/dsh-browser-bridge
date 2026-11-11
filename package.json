@@ -1,0 +1,50 @@
+{
+  "name": "dsh-browser-bridge",
+  "version": "0.3.0",
+  "description": "接 Chrome / Edge 采集器抓来的页面，让 agent 读你正在看的那一页。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./docs/*": "./docs/*"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "docs",
+    "collector",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.19.0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "browser",
+    "chrome-extension",
+    "edge-extension",
+    "webpage"
+  ],
+  "author": "zhaopw5",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhaopw5/dsh-browser-bridge.git"
+  },
+  "homepage": "https://github.com/zhaopw5/dsh-browser-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/zhaopw5/dsh-browser-bridge/issues"
+  }
+}

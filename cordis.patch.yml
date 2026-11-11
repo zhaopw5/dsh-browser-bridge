@@ -1,0 +1,4 @@
+# dsh-browser-bridge 的装配补丁：把插件行插进 DSH 的装配树。
+- insert:
+    - id: browser-bridge
+      name: dsh-browser-bridge

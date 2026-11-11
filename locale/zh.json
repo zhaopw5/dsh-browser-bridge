@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "浏览器采集器",
+    "description": "接 Chrome / Edge 扩展抓来的页面，让 agent 读你此刻正在看的那一页。",
+    "detail": "docs/detail.zh.md"
+  }
+}

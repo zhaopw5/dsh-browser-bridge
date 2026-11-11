@@ -1,6 +1,5 @@
-inbox/
 node_modules/
+inbox/
 *.log
-.DS_Store
 Thumbs.db
-token.txt
+.DS_Store

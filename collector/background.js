@@ -119,9 +119,27 @@ function pageSnapshot() {
     url: location.href,
     title: document.title,
     at: new Date().toISOString(),
+    browser: detectBrowser(),
     text: text.slice(0, 400000),
     html: document.documentElement.outerHTML.slice(0, 4000000),
   };
+
+  // 同一份代码同时装进 Chrome 和 Edge：按运行时特征上报来源，
+  // 插件的 chrome / edge 开关据此放行。
+  function detectBrowser() {
+    try {
+      const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+      const names = brands.map((b) => b.brand || '').join(' ');
+      if (/Microsoft Edge/i.test(names)) return 'edge';
+      if (/Google Chrome/i.test(names)) return 'chrome';
+    } catch {
+      /* 老浏览器没有 userAgentData */
+    }
+    const ua = navigator.userAgent || '';
+    if (/\bEdg\//.test(ua)) return 'edge';
+    if (/\bChrome\//.test(ua)) return 'chrome';
+    return 'chromium';
+  }
 }
 
 function badge(text, color) {
