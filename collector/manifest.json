@@ -1,15 +1,27 @@
 {
   "manifest_version": 3,
   "name": "DSH 抓页",
-  "version": "0.4.0",
-  "description": "把当前标签页渲染后的正文交给本机 DSH（Chrome / Edge 通用，不读 cookie、不联网）。",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "version": "0.7.0",
+  "description": "把标签页正文交给本机 DSH：可手动抓单页，也可持续抓取所有新标签页（不读 cookie、不联网）。",
+  "permissions": ["activeTab", "scripting", "storage", "offscreen"],
   "optional_host_permissions": ["*://*/*"],
   "host_permissions": ["http://127.0.0.1:38999/*"],
   "background": { "service_worker": "background.js" },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
   "action": {
-    "default_title": "DSH 抓页",
-    "default_popup": "popup.html"
+    "default_title": "抓页",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
   },
   "commands": {
     "capture-now": {

@@ -18,7 +18,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "LICENSE"
+    "LICENSE",
+    "mcp"
   ],
   "dsh": {
     "bundle": {

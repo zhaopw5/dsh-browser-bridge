@@ -1,15 +1,24 @@
-// DSH 抓页 —— 点图标弹面板；可以手动抓一页，也可以对某个站点开"自动抓"。
+// 抓页 —— 点图标弹面板。手动抓一页，或打开「持续抓取」让每个标签页加载完自动抓。
 // 不读 cookie、不发外网。
 
 const ENDPOINT = 'http://127.0.0.1:38999/ingest';
 const TOKEN = 'dsh-bridge-7f3a91c2e5';
-const AUTO_KEY = 'autoHosts';
+const FOLLOW_KEY = 'follow';
+const ALL_SITES = '*://*/*';
 
-// 每个标签页最近一次自动抓的 url，防重复
-const lastAuto = new Map();
+// 防重复：同一标签页 + 同一个 URL，30 秒内不重复抓
+const lastByTab = new Map();
+let lastGlobal = { url: '', at: 0 };
 
 // ---------- 面板消息 ----------
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === 'pulse') {
+    chrome.action
+      .setIcon({ path: msg.bright ? ICONS.live : ICONS.dim })
+      .catch(() => {});
+    sendResponse({ ok: true });
+    return true;
+  }
   if (!msg || msg.type !== 'capture') return;
   capture(msg.tabId, { silent: false })
     .then((r) => sendResponse(r))
@@ -17,38 +26,113 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// ---------- 快捷键：直接抓，不弹面板 ----------
+// ---------- 快捷键：不弹面板直接抓 ----------
 chrome.commands.onCommand.addListener(async (cmd) => {
   if (cmd !== 'capture-now') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && tab.id != null) capture(tab.id, { silent: false });
 });
 
-// ---------- 自动抓：白名单站点加载完就抓 ----------
+// ---------- 持续抓取 ----------
+async function isFollowing() {
+  const { [FOLLOW_KEY]: on = false } = await chrome.storage.local.get(FOLLOW_KEY);
+  if (!on) return false;
+  return await chrome.permissions.contains({ origins: [ALL_SITES] }).catch(() => false);
+}
+
+function shouldSkip(tabId, url) {
+  const now = Date.now();
+  const prev = lastByTab.get(tabId);
+  if (prev && prev.url === url && now - prev.at < 30000) return true;
+  if (lastGlobal.url === url && now - lastGlobal.at < 30000) return true;
+  lastByTab.set(tabId, { url, at: now });
+  lastGlobal = { url, at: now };
+  return false;
+}
+
+// 页面加载完成
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== 'complete') return;
   const url = tab && tab.url;
   if (!url || !/^https?:/i.test(url)) return;
-
-  const host = hostOf(url);
-  if (!host) return;
-
-  const { [AUTO_KEY]: hosts = [] } = await chrome.storage.local.get(AUTO_KEY);
-  if (!hosts.includes(host)) return;
-
-  const granted = await chrome.permissions
-    .contains({ origins: [`*://${host}/*`] })
-    .catch(() => false);
-  if (!granted) return;
-
-  const prev = lastAuto.get(tabId);
-  if (prev && prev.url === url && Date.now() - prev.at < 6000) return;
-  lastAuto.set(tabId, { url, at: Date.now() });
-
+  if (!(await isFollowing())) return;
+  if (shouldSkip(tabId, url)) return;
   capture(tabId, { silent: true });
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => lastAuto.delete(tabId));
+// 切到一个已经加载好的标签页
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  if (!(await isFollowing())) return;
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return;
+  }
+  if (!tab || tab.status !== 'complete') return;
+  if (!/^https?:/i.test(tab.url || '')) return;
+  if (shouldSkip(tabId, tab.url)) return;
+  capture(tabId, { silent: true });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => lastByTab.delete(tabId));
+
+// ---------- 图标状态：抓取中换成带红灯的图标，并用 offscreen 定时器做呼吸 ----------
+const ICONS = {
+  idle: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
+  live: { 16: 'icons/on/16.png', 32: 'icons/on/32.png', 48: 'icons/on/48.png', 128: 'icons/on/128.png' },
+  dim: {
+    16: 'icons/on-dim/16.png',
+    32: 'icons/on-dim/32.png',
+    48: 'icons/on-dim/48.png',
+    128: 'icons/on-dim/128.png',
+  },
+};
+
+/** offscreen 文档只用来跑定时器：MV3 的 service worker 会被回收，撑不住动画。 */
+async function ensurePulse(on) {
+  try {
+    if (!chrome.offscreen) return;
+    const has = await chrome.offscreen.hasDocument();
+    if (on && !has) {
+      await chrome.offscreen.createDocument({
+        url: 'pulse.html',
+        reasons: ['DOM_PARSER'],
+        justification: '工具栏图标的呼吸效果需要一个常驻定时器',
+      });
+    } else if (!on && has) {
+      await chrome.offscreen.closeDocument();
+    }
+  } catch {
+    /* 建不了就一直用常亮红灯 */
+  }
+}
+
+async function syncAction() {
+  const on = await isFollowing();
+  try {
+    await chrome.action.setIcon({ path: on ? ICONS.live : ICONS.idle });
+    await chrome.action.setTitle({ title: on ? '抓页 · 持续抓取中' : '抓页' });
+    await chrome.action.setBadgeText({ text: '' });
+  } catch {
+    /* 图标失败不影响抓取 */
+  }
+  ensurePulse(on).catch(() => {});
+}
+
+/** 角标只用来报错：抓取中不打扰，靠绿灯表示状态。 */
+function flash(text, color) {
+  chrome.action.setBadgeBackgroundColor({ color });
+  chrome.action.setBadgeText({ text });
+  setTimeout(() => syncAction().catch(() => {}), 2200);
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[FOLLOW_KEY]) syncAction().catch(() => {});
+});
+chrome.runtime.onStartup.addListener(() => syncAction().catch(() => {}));
+chrome.runtime.onInstalled.addListener(() => syncAction().catch(() => {}));
+syncAction().catch(() => {});
 
 // ---------- 抓取 ----------
 async function capture(tabId, { silent = false } = {}) {
@@ -70,11 +154,11 @@ async function capture(tabId, { silent = false } = {}) {
     });
     data = res && res.result;
   } catch (e) {
-    if (!silent) badge('ERR', '#c62828');
+    flash('ERR', '#c62828');
     return { ok: false, error: '注入失败：' + ((e && e.message) || e) };
   }
   if (!data) {
-    if (!silent) badge('ERR', '#c62828');
+    flash('ERR', '#c62828');
     return { ok: false, error: '页面无内容' };
   }
 
@@ -85,24 +169,17 @@ async function capture(tabId, { silent = false } = {}) {
       body: JSON.stringify(data),
     });
     if (!resp.ok) {
-      if (!silent) badge('ERR', '#c62828');
+      flash('ERR', '#c62828');
       return { ok: false, error: '桥返回 ' + resp.status };
     }
     const j = await resp.json();
-    if (!silent) badge('OK', '#2e7d32');
-    else badge('A', '#0b57d0');
+    // 抓取中不弹角标，手动模式才闪一下 OK
+    if (!silent && !(await isFollowing())) flash('OK', '#1e7b34');
+    else syncAction().catch(() => {});
     return { ok: true, file: j.file, title: data.title, chars: data.text.length };
   } catch {
-    if (!silent) badge('ERR', '#c62828');
+    flash('ERR', '#c62828');
     return { ok: false, error: '连不上本地桥' };
-  }
-}
-
-function hostOf(url) {
-  try {
-    return new URL(url).host;
-  } catch {
-    return '';
   }
 }
 
@@ -140,10 +217,4 @@ function pageSnapshot() {
     if (/\bChrome\//.test(ua)) return 'chrome';
     return 'chromium';
   }
-}
-
-function badge(text, color) {
-  chrome.action.setBadgeBackgroundColor({ color });
-  chrome.action.setBadgeText({ text });
-  setTimeout(() => chrome.action.setBadgeText({ text: '' }), 2500);
 }

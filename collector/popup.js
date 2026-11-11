@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const PING = 'http://127.0.0.1:38999/ping';
-const AUTO_KEY = 'autoHosts';
+const FOLLOW_KEY = 'follow';
+const ALL_SITES = '*://*/*';
 
 let currentTab = null;
 let host = '';
@@ -19,24 +20,21 @@ function setResult(text, kind) {
   el.className = kind || '';
 }
 
-async function getAutoHosts() {
-  const { [AUTO_KEY]: hosts = [] } = await chrome.storage.local.get(AUTO_KEY);
-  return hosts;
+async function hasAllSites() {
+  try {
+    return await chrome.permissions.contains({ origins: [ALL_SITES] });
+  } catch {
+    return false;
+  }
 }
 
-async function setAutoHosts(hosts) {
-  await chrome.storage.local.set({ [AUTO_KEY]: hosts });
-}
-
-function paintAuto(on, hosts) {
-  $('toggle').checked = on;
-  const el = $('state');
-  el.textContent = on ? '本站自动：开' : '本站自动：关';
-  el.className = on ? 'on' : '';
-  $('switchHint').innerHTML = on
-    ? `已开启：<b>${host}</b> 的页面加载完自动抓`
-    : '打开后，这个站点的页面加载完自动抓';
-  $('autoCount').textContent = hosts.length ? `自动站点 ${hosts.length} 个` : '';
+function paintFollow(on) {
+  $('follow').checked = on;
+  $('followHint').textContent = on
+    ? '所有标签页加载完自动抓，含新开的'
+    : '打开后，新标签页不用再点';
+  $('state').textContent = on ? '持续抓取中' : '手动模式';
+  $('state').className = on ? 'on' : '';
 }
 
 async function init() {
@@ -52,10 +50,10 @@ async function init() {
   $('grab').disabled = !isWeb;
   if (!isWeb) setResult('这页抓不了（chrome:// 或扩展页）', 'err');
 
-  const hosts = await getAutoHosts();
-  const on = isWeb && hosts.includes(host);
-  paintAuto(on, hosts);
-  if (!isWeb) $('toggle').disabled = true;
+  const { [FOLLOW_KEY]: follow = false } = await chrome.storage.local.get(FOLLOW_KEY);
+  const on = follow && (await hasAllSites());
+  if (follow && !on) await chrome.storage.local.set({ [FOLLOW_KEY]: false });
+  paintFollow(on);
 
   pingBridge();
 }
@@ -72,39 +70,40 @@ async function pingBridge() {
   }
 }
 
-$('toggle').addEventListener('change', async (e) => {
-  if (!host) return;
-  const wantOn = e.target.checked;
-  const hosts = await getAutoHosts();
-  const next = new Set(hosts);
+$('follow').addEventListener('change', async (e) => {
+  const want = e.target.checked;
 
-  if (wantOn) {
+  if (want) {
     let granted = false;
     try {
-      granted = await chrome.permissions.request({ origins: [`*://${host}/*`] });
+      granted = await chrome.permissions.request({ origins: [ALL_SITES] });
     } catch {
       granted = false;
     }
     if (!granted) {
       e.target.checked = false;
-      setResult('没有授权，未开启', 'err');
-      paintAuto(false, hosts);
+      paintFollow(false);
+      setResult('没有获得「所有网站」授权，未开启', 'err');
       return;
     }
-    next.add(host);
-    await setAutoHosts([...next]);
-    setResult('已开启，之后这个站点自动抓', 'ok');
-    paintAuto(true, [...next]);
+  }
+
+  await chrome.storage.local.set({ [FOLLOW_KEY]: want });
+  paintFollow(want);
+
+  if (want) {
+    setResult('已开启：切到别的标签页会立刻抓一次');
+    if (currentTab && currentTab.id != null && /^https?:/i.test(currentTab.url || '')) {
+      const r = await chrome.runtime.sendMessage({ type: 'capture', tabId: currentTab.id });
+      if (r && r.ok) setResult(`已开始 · 当前页已抓（${r.chars} 字）`, 'ok');
+    }
   } else {
-    next.delete(host);
-    await setAutoHosts([...next]);
     try {
-      await chrome.permissions.remove({ origins: [`*://${host}/*`] });
+      await chrome.permissions.remove({ origins: [ALL_SITES] });
     } catch {
       /* 忽略 */
     }
-    setResult('已关闭这个站点的自动抓取', '');
-    paintAuto(false, [...next]);
+    setResult('已关闭持续抓取，恢复手动');
   }
 });
 

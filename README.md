@@ -62,6 +62,7 @@ Chrome 和 Edge 用同一份代码：扩展在运行时判断自己在哪个浏�
 | 文件 | 内容 |
 |---|---|
 | `时间-域名.md` | 正文（取 `article`/`main`，没有才退回 `body`），带 url/title 头 |
+| `latest.md` | 最近一次抓取的正文，内容同上——给别的 agent 的稳定入口，不用记文件名 |
 | `时间-域名.html` | 渲染后的原始 HTML |
 | `时间-域名.json` | 元信息 |
 | `last.json` | 最近一次抓取 |
@@ -95,6 +96,49 @@ Chrome 和 Edge 用同一份代码：扩展在运行时判断自己在哪个浏�
 ```
 
 `GET /ping` 探活，返回连接器和采集器路径。
+
+## MCP：把页面给别的 agent
+
+`mcp/server.mjs` 是一个零依赖的 stdio MCP 服务端，直接读同一个 `inbox/`，暴露两个工具：
+
+- `browser_page` —— 取正文（最近一次，或指定 id）
+- `browser_list` —— 列最近的抓取，用来定位
+
+协议：JSON-RPC 2.0、换行分隔、stdin/stdout，日志全走 stderr（stdout 不能有杂音）。
+
+### Codex CLI
+
+`~/.codex/config.toml`：
+
+```toml
+[mcp_servers.browser-bridge]
+command = 'C:\Program Files\Volta\node.exe'
+args = ['C:\Users\zpw\.dsh\plugins\dsh-browser-bridge\mcp\server.mjs']
+startup_timeout_sec = 20
+```
+
+### Claude Code
+
+```bash
+claude mcp add browser-bridge -- node "C:\Users\zpw\.dsh\plugins\dsh-browser-bridge\mcp\server.mjs"
+```
+
+### Cursor
+
+`~/.cursor/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "browser-bridge": {
+      "command": "node",
+      "args": ["C:\\Users\\zpw\\.dsh\\plugins\\dsh-browser-bridge\\mcp\\server.mjs"]
+    }
+  }
+}
+```
+
+换目录用环境变量 `DSH_BROWSER_BRIDGE_INBOX` 覆盖。
 
 ## 权限与边界
 
