@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DSH 抓页</title>
+<style>
+  :root {
+    --line: #e3e5e8;
+    --text: #1f1f1f;
+    --muted: #6b7075;
+    --blue: #0b57d0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    width: 300px;
+    margin: 0;
+    padding: 14px 14px 12px;
+    font: 13px/1.5 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--text);
+    background: #fff;
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .head b { font-size: 13px; font-weight: 600; }
+  #state { font-size: 12px; color: var(--muted); }
+  #state.on { color: #1e7b34; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 10px;
+    margin-bottom: 10px;
+  }
+  .label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  #pageTitle {
+    font-weight: 600;
+    font-size: 12.5px;
+    line-height: 1.4;
+    max-height: 3.9em;
+    overflow: hidden;
+    word-break: break-all;
+  }
+  #pageHost { font-size: 11.5px; color: var(--blue); margin-top: 3px; word-break: break-all; }
+
+  button.primary {
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button.primary:hover:not(:disabled) { background: #0a4cb8; }
+  button.primary:disabled { background: #c2c6cb; cursor: not-allowed; }
+
+  #result {
+    min-height: 17px;
+    margin: 8px 2px 0;
+    font-size: 12px;
+    color: var(--muted);
+    word-break: break-all;
+  }
+  #result.ok { color: #1e7b34; }
+  #result.err { color: #a33; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 11px;
+    margin-top: 2px;
+    border-top: 1px solid var(--line);
+  }
+  .row .txt { font-size: 12.5px; font-weight: 600; }
+  .row .hint { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+  .row .hint b { color: var(--blue); font-weight: 400; word-break: break-all; }
+
+  .switch { position: relative; display: inline-block; width: 38px; height: 21px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #cfd3d8;
+    border-radius: 11px;
+    transition: background .15s;
+  }
+  .slider::before {
+    content: "";
+    position: absolute;
+    width: 17px; height: 17px;
+    left: 2px; top: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .15s;
+  }
+  .switch input:checked + .slider { background: #1e7b34; }
+  .switch input:checked + .slider::before { transform: translateX(17px); }
+
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 11px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #bridge.ok { color: #1e7b34; }
+  #bridge.bad { color: #a33; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <b>DSH 抓页</b>
+    <span id="state">…</span>
+  </div>
+
+  <div class="card">
+    <div class="label">当前页面</div>
+    <div id="pageTitle">读取中…</div>
+    <div id="pageHost"></div>
+  </div>
+
+  <button id="grab" class="primary" disabled>抓取这一页</button>
+  <div id="result"></div>
+
+  <div class="row">
+    <div>
+      <div class="txt">本站自动抓取</div>
+      <div class="hint" id="switchHint">打开后，这个站点的页面加载完自动抓</div>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="toggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="foot">
+    <span>本地桥：<span id="bridge">检测中…</span></span>
+    <span id="autoCount"></span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
