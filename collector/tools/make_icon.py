@@ -39,9 +39,9 @@ def build(bold=False, dot=True, live=False, dim=False):
     glyph = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(glyph)
 
-    inset = S * 0.185
+    inset = S * 0.145
     arm = S * 0.26 if bold else S * 0.285
-    w = S * 0.085 if bold else S * 0.058
+    w = S * 0.075 if bold else S * 0.05
     corner(d, inset, inset, 1, 1, arm, w)
     corner(d, S - inset, inset, -1, 1, arm, w)
     corner(d, inset, S - inset, 1, -1, arm, w)
@@ -50,10 +50,10 @@ def build(bold=False, dot=True, live=False, dim=False):
     if dot:
         cx = cy = S / 2
         if live:
-            r = S * (0.12 if bold else 0.13)
+            r = S * (0.175 if bold else 0.215)
             # 亮帧：实心红点 + 白环；灭帧：灯完全灭掉，只留取景框
             if not dim:
-                ring = S * 0.028
+                ring = S * 0.022
                 d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill="white")
                 d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=RED + (255,))
         else:
