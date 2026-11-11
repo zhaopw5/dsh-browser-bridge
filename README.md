@@ -1,5 +1,7 @@
 # DSH 抓页
 
+**中文** | [English](README.en.md)
+
 把**你在 Chrome 里已经登录的页面**，交给**跑在本机的 AI agent**（DeepSeek Harness）读。
 
 浏览器扩展 + 一个只听 `127.0.0.1` 的本地小服务。登录、2FA、验证码都由人来做，agent 只拿渲染后的正文。
